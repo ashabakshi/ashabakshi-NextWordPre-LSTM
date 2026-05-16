@@ -1,4 +1,4 @@
 streamlit
 numpy
-tensorflow==2.15.0
 h5py
+tensorflow==2.13.0

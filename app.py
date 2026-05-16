@@ -559,7 +559,7 @@ st.markdown("""
 # ---------------- LOAD FILES (cached) ----------------
 @st.cache_resource
 def load_assets():
-    model = load_model("lstm_model.h5", compile=False,safe_mode=False)
+    model = load_model("lstm_model.h5", compile=False)
     with open("tokenizer.pkl", "rb") as f:
         tokenizer = pickle.load(f)
     with open("max_len.pkl", "rb") as f:
@@ -569,6 +569,9 @@ def load_assets():
 model, tokenizer, max_len = load_assets()
 
 vocab_size = len(tokenizer.word_index) + 1
+
+# Fast reverse-lookup dictionary (index → word)
+index_to_word = {index: word for word, index in tokenizer.word_index.items()}
 
 # ---------------- HEADER ----------------
 st.markdown("""
@@ -592,31 +595,39 @@ if "predicted_words" not in st.session_state:
 # ---------------- PREDICTION FUNCTION ----------------
 def predict_next_words(text, top_n=5):
     """Predict top N next words with confidence scores."""
-    token_list = tokenizer.texts_to_sequences([text])[0]
-    token_list = pad_sequences(
-        [token_list],
-        maxlen=max_len - 1,
-        padding='pre'
-    )
-    predictions = model.predict(token_list, verbose=0)[0]
+    try:
+        token_list = tokenizer.texts_to_sequences([text])[0]
 
-    # Get top N predictions
-    top_indices = np.argsort(predictions)[-top_n:][::-1]
-    top_probs = predictions[top_indices]
+        # Handle empty / unrecognized input
+        if len(token_list) == 0:
+            return []
 
-    # Normalize to percentages
-    total = np.sum(top_probs)
-    if total > 0:
-        top_probs = top_probs / total * 100
+        token_list = pad_sequences(
+            [token_list],
+            maxlen=max_len - 1,
+            padding='pre'
+        )
+        predictions = model.predict(token_list, verbose=0)[0]
 
-    results = []
-    for idx, prob in zip(top_indices, top_probs):
-        for word, index in tokenizer.word_index.items():
-            if index == idx:
-                results.append((word, prob))
-                break
+        # Get top N predictions
+        top_indices = np.argsort(predictions)[-top_n:][::-1]
+        top_probs = predictions[top_indices]
 
-    return results
+        # Normalize to percentages
+        total = np.sum(top_probs)
+        if total > 0:
+            top_probs = top_probs / total * 100
+
+        results = []
+        for idx, prob in zip(top_indices, top_probs):
+            word = index_to_word.get(idx, "")
+            if word:
+                results.append((word, float(prob)))
+
+        return results
+    except Exception as e:
+        st.error(f"Prediction Error: {e}")
+        return []
 
 # ---------------- INPUT SECTION ----------------
 st.markdown("""
